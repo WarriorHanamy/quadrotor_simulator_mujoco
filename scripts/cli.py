@@ -9,17 +9,17 @@ import tempfile
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BUILD_DIR = PROJECT_ROOT / "build_standalone"
 CORE_BIN = BUILD_DIR / "quadrotor_sim_core"
 GLFW_BIN = BUILD_DIR / "quadrotor_sim_glfw_adapter"
-MODEL_DEFAULT = "model/mujoco/drone.xml"
+MODEL_DEFAULT = "deps/model/mujoco/drone.xml"
 CMAKE_STANDALONE = PROJECT_ROOT / "CMakeLists_standalone.txt"
 
 
 def _env():
     env = os.environ.copy()
-    lib_path = str(PROJECT_ROOT / "lib")
+    lib_path = str(PROJECT_ROOT / "deps" / "lib")
     existing = env.get("LD_LIBRARY_PATH", "")
     env["LD_LIBRARY_PATH"] = f"{lib_path}:{existing}" if existing else lib_path
     return env

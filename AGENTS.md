@@ -20,14 +20,17 @@ uv run sim glfw --model path/to/drone.xml
 
 - **uv** manages the Python environment and provides the `sim` CLI entrypoint.
 - C++ binaries are built to `build_standalone/` via CMake (`CMakeLists_standalone.txt`).
-- MuJoCo 2.3.2 `.so` is bundled at `lib/libmujoco.so`. No system MuJoCo install needed.
-- `LD_LIBRARY_PATH` is auto-set by `cli.py` to include `lib/`.
+- MuJoCo 2.3.2 `.so` is bundled at `deps/lib/libmujoco.so`. No system MuJoCo install needed.
+- `LD_LIBRARY_PATH` is auto-set by `cli.py` to include `deps/lib/`.
 
 ## Architecture
 
-- **Single executable** `quadrotor_simulator` built from all `.cc`/`.cpp` under `src/`.
-- **Two threads**: physics thread (`PhysicsLoop` in `src/main.cc`) runs MuJoCo stepping; main thread runs GLFW render loop (`sim->renderloop()`). Access to `sim->d` is protected by `sim->mtx`.
-- **ROS 2 node**: `MuJoCoMessageHandler` (its own `rclcpp::Node`, spun in a third thread). It publishes odom, IMU, images, and `/clock`; subscribes to `cmd` (`geometry_msgs::msg::Wrench`).
+- **Core simulator** `quadrotor_sim_core` (`src/core/`) — headless physics loop, writes `QuadrotorState` to `/dev/shm/quadrotor_sim/state`, reads `QuadrotorControl` from `/dev/shm/quadrotor_sim/ctrl`.
+- **ROS 2 adapter** `quadrotor_sim_ros_adapter` (`src/ros_adapter/`) — independent `rclcpp::Node`, reads shm state → publishes odom/imu/clock, subscribes cmd → writes shm ctrl.
+- **GLFW adapter** `quadrotor_sim_glfw_adapter` (`src/glfw_adapter/`) — reads shm state → renders MuJoCo scene.
+- **Legacy** `quadrotor_simulator` (`src/_legacy/`) — original monolithic binary (GLFW + ROS in-process), kept for backward compatibility.
+- **Schema** — `include/sim_schema.h` (C++), `python/quadrotor_sim/schema.py` (Pydantic), `python/quadrotor_sim/shm.py` (mmap I/O).
+- **Model** — `deps/model/mujoco/drone.xml` defines 4 actuators (`body_thrust`, `x_moment`, `y_moment`, `z_moment`) → mapped to `d->ctrl[0..3]`.
 
 ## Topic remapping under namespace
 

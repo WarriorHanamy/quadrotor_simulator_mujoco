@@ -5,17 +5,16 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# find dependencies
 find_package(ament_cmake REQUIRED)
 
 list(APPEND ${PROJECT_NAME}_CONFIG_EXTRAS
-        cmake/CheckAvxSupport.cmake
-        cmake/FindOrFetch.cmake
-        cmake/MujocoHarden.cmake
-        cmake/MujocoLinkOptions.cmake
-        cmake/MujocoMacOS.cmake
-        cmake/SampleDependencies.cmake
-        cmake/SampleOptions.cmake
+        deps/cmake/CheckAvxSupport.cmake
+        deps/cmake/FindOrFetch.cmake
+        deps/cmake/MujocoHarden.cmake
+        deps/cmake/MujocoLinkOptions.cmake
+        deps/cmake/MujocoMacOS.cmake
+        deps/cmake/SampleDependencies.cmake
+        deps/cmake/SampleOptions.cmake
         )
 
 find_package(ament_cmake REQUIRED)
@@ -27,23 +26,19 @@ find_package(tf2_ros REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(rosgraph_msgs REQUIRED)
 
-# Mujoco location
-if(NOT TARGET mujoco)
-  add_library(mujoco SHARED IMPORTED)
-  set_target_properties(mujoco PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/lib/libmujoco.so)
-endif()
-
 # ---------------------------------------------------------------------------
-# Target 1: quadrotor_simulator (original, backward-compatible)
+# Target 1: quadrotor_simulator (legacy backward-compatible binary)
 # ---------------------------------------------------------------------------
-file(GLOB_RECURSE source_orig ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cc)
-# Exclude new subdirectory sources from the original target
-list(FILTER source_orig EXCLUDE REGEX "src/(core|ros_adapter|glfw_adapter)/")
+file(GLOB_RECURSE source_orig
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/_legacy/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/_legacy/*.cc
+)
 
 add_executable(quadrotor_simulator ${source_orig})
 target_link_libraries(quadrotor_simulator mujoco glfw pthread rt ${CMAKE_DL_LIBS})
 target_include_directories(quadrotor_simulator PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/_legacy>
   $<INSTALL_INTERFACE:include>)
 target_compile_options(quadrotor_simulator PUBLIC ${DEEPBREAK_CXX_FLAGS})
 target_compile_features(quadrotor_simulator PUBLIC c_std_99 cxx_std_17)
@@ -60,9 +55,9 @@ ament_target_dependencies(
 
 # ---------------------------------------------------------------------------
 # Target 2+3: quadrotor_sim_core + quadrotor_sim_glfw_adapter
-# (defined in CMakeLists_standalone.txt, included here for deduplication)
+# (defined in deps/cmake/SimCore.cmake)
 # ---------------------------------------------------------------------------
-include(CMakeLists_standalone.txt)
+include(${CMAKE_CURRENT_SOURCE_DIR}/deps/cmake/SimCore.cmake)
 
 # ---------------------------------------------------------------------------
 # Target 4: quadrotor_sim_ros_adapter (ROS 2 node, zero MuJoCo dependency)
@@ -96,7 +91,7 @@ install(TARGETS
 install(DIRECTORY launch
          DESTINATION share/${PROJECT_NAME})
 
-install(DIRECTORY model
+install(DIRECTORY deps/model
         DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
