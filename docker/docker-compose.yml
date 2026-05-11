@@ -1,0 +1,26 @@
+# docker-compose.yml — quadrotor_simulator_mujoco
+#
+# Host process (start manually first):
+#   ./quadrotor_sim_core model/mujoco/drone.xml
+#
+# Then bring up the ROS adapter:
+#   docker compose up
+
+version: "3.8"
+
+services:
+  ros_adapter:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: quadrotor_sim_ros_adapter:latest
+    container_name: quadrotor_sim_ros
+    network_mode: host
+    volumes:
+      # Shared memory from host
+      - /dev/shm/quadrotor_sim:/dev/shm/quadrotor_sim:rw
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+    stdin_open: true
+    tty: true
+    restart: unless-stopped

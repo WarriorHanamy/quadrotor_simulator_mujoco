@@ -1,0 +1,32 @@
+cmake_minimum_required(VERSION 3.8)
+project(quadrotor_sim_ros_adapter)
+
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(rosgraph_msgs REQUIRED)
+
+add_executable(quadrotor_sim_ros_adapter
+  ros_adapter/ros_adapter.cpp
+)
+
+target_include_directories(quadrotor_sim_ros_adapter PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_compile_features(quadrotor_sim_ros_adapter PUBLIC cxx_std_17)
+
+ament_target_dependencies(quadrotor_sim_ros_adapter
+  rclcpp
+  sensor_msgs
+  geometry_msgs
+  nav_msgs
+  rosgraph_msgs
+)
+
+install(TARGETS quadrotor_sim_ros_adapter
+  DESTINATION lib/${PROJECT_NAME})
+
+ament_package()

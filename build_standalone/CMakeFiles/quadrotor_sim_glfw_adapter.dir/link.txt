@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/quadrotor_sim_glfw_adapter.dir/link.d CMakeFiles/quadrotor_sim_glfw_adapter.dir/home/rec/quadrotor_simulator_mujoco/src/glfw_adapter/glfw_adapter_main.cc.o -o quadrotor_sim_glfw_adapter  -Wl,-rpath,/home/rec/quadrotor_simulator_mujoco/lib /home/rec/quadrotor_simulator_mujoco/lib/libmujoco.so -lglfw -lpthread -lrt -ldl

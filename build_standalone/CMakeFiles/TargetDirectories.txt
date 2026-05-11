@@ -1,0 +1,4 @@
+/home/rec/quadrotor_simulator_mujoco/build_standalone/CMakeFiles/quadrotor_sim_core.dir
+/home/rec/quadrotor_simulator_mujoco/build_standalone/CMakeFiles/quadrotor_sim_glfw_adapter.dir
+/home/rec/quadrotor_simulator_mujoco/build_standalone/CMakeFiles/edit_cache.dir
+/home/rec/quadrotor_simulator_mujoco/build_standalone/CMakeFiles/rebuild_cache.dir

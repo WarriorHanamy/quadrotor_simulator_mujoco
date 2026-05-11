@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/rec/quadrotor_simulator_mujoco/build_standalone/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
