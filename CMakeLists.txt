@@ -59,19 +59,13 @@ ament_target_dependencies(
 )
 
 # ---------------------------------------------------------------------------
-# Target 2: quadrotor_sim_core (headless physics, zero ROS dependency)
+# Target 2+3: quadrotor_sim_core + quadrotor_sim_glfw_adapter
+# (defined in CMakeLists_standalone.txt, included here for deduplication)
 # ---------------------------------------------------------------------------
-file(GLOB source_core ${CMAKE_CURRENT_SOURCE_DIR}/src/core/*.cc)
-add_executable(quadrotor_sim_core ${source_core})
-target_link_libraries(quadrotor_sim_core mujoco pthread rt ${CMAKE_DL_LIBS})
-target_include_directories(quadrotor_sim_core PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/core>
-  $<INSTALL_INTERFACE:include>)
-target_compile_features(quadrotor_sim_core PUBLIC cxx_std_17)
+include(CMakeLists_standalone.txt)
 
 # ---------------------------------------------------------------------------
-# Target 3: quadrotor_sim_ros_adapter (ROS 2 node, zero MuJoCo dependency)
+# Target 4: quadrotor_sim_ros_adapter (ROS 2 node, zero MuJoCo dependency)
 # ---------------------------------------------------------------------------
 file(GLOB source_ros_adapter ${CMAKE_CURRENT_SOURCE_DIR}/src/ros_adapter/*.cpp)
 add_executable(quadrotor_sim_ros_adapter ${source_ros_adapter})
@@ -88,18 +82,6 @@ ament_target_dependencies(
   nav_msgs
   rosgraph_msgs
 )
-
-# ---------------------------------------------------------------------------
-# Target 4: quadrotor_sim_glfw_adapter (render viewer)
-# ---------------------------------------------------------------------------
-file(GLOB source_glfw_adapter ${CMAKE_CURRENT_SOURCE_DIR}/src/glfw_adapter/*.cc)
-add_executable(quadrotor_sim_glfw_adapter ${source_glfw_adapter})
-target_include_directories(quadrotor_sim_glfw_adapter PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/core>
-  $<INSTALL_INTERFACE:include>)
-target_link_libraries(quadrotor_sim_glfw_adapter mujoco glfw pthread rt ${CMAKE_DL_LIBS})
-target_compile_features(quadrotor_sim_glfw_adapter PUBLIC cxx_std_17)
 
 # ---------------------------------------------------------------------------
 # Install

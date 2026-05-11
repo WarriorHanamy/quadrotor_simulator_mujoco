@@ -1,62 +1,69 @@
-# Standalone build for quadrotor_sim_core on Linux hosts without ROS
-# Usage (direct): cmake -B build -S .
-# Usage (via trampoline): include() from another CMakeLists.txt
+# Standalone build for quadrotor_sim_core on Linux hosts without ROS.
+# This file is callable in two modes:
+#   1. Direct: cmake -B build -S .   (contains cmake_minimum_required + project)
+#   2. Include: CMakeLists.txt does `include()` to reuse target definitions.
 #
-# Paths use CMAKE_CURRENT_LIST_DIR so the file works from any -S directory.
+# When included, the top-level boilerplate is skipped (already set by caller).
 
-cmake_minimum_required(VERSION 3.10)
-project(quadrotor_sim_core_standalone)
+if(NOT DEFINED _SIM_STANDALONE_INCLUDED)
+  cmake_minimum_required(VERSION 3.10)
+  project(quadrotor_sim_core_standalone)
+  set(CMAKE_CXX_STANDARD 17)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+  set(_SIM_STANDALONE_INCLUDED TRUE)
+endif()
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# Resolve project root relative to this file
+get_filename_component(SIM_ROOT "${CMAKE_CURRENT_LIST_DIR}" ABSOLUTE)
 
-# Resolve project root relative to this CMakeLists file
-get_filename_component(PROJ_ROOT "${CMAKE_CURRENT_LIST_DIR}" ABSOLUTE)
+# MuJoCo library (guard against double-definition when included)
+if(NOT TARGET mujoco)
+  add_library(mujoco SHARED IMPORTED)
+  set_target_properties(mujoco PROPERTIES
+    IMPORTED_LOCATION ${SIM_ROOT}/lib/libmujoco.so)
+endif()
 
-# MuJoCo library
-add_library(mujoco SHARED IMPORTED)
-set_target_properties(mujoco PROPERTIES
-  IMPORTED_LOCATION ${PROJ_ROOT}/lib/libmujoco.so)
+# ---- quadrotor_sim_core (headless physics) ----
 
-# Core simulator sources
-add_executable(quadrotor_sim_core
-  ${PROJ_ROOT}/src/core/main.cc
-  ${PROJ_ROOT}/src/core/sim_core.cc
-)
-
-target_include_directories(quadrotor_sim_core PRIVATE
-  ${PROJ_ROOT}/include
-  ${PROJ_ROOT}/src/core
-)
-
-target_compile_options(quadrotor_sim_core PRIVATE -Wall -Wextra)
-
-target_link_libraries(quadrotor_sim_core PRIVATE
-  mujoco
-  pthread
-  rt
-  ${CMAKE_DL_LIBS}
-)
-
-# GLFW adapter (optional, requires GLFW)
-find_package(PkgConfig)
-pkg_check_modules(GLFW glfw3)
-
-if(GLFW_FOUND)
-  add_executable(quadrotor_sim_glfw_adapter
-    ${PROJ_ROOT}/src/glfw_adapter/glfw_adapter_main.cc
+if(NOT TARGET quadrotor_sim_core)
+  add_executable(quadrotor_sim_core
+    ${SIM_ROOT}/src/core/main.cc
+    ${SIM_ROOT}/src/core/sim_core.cc
   )
-  target_include_directories(quadrotor_sim_glfw_adapter PRIVATE
-    ${PROJ_ROOT}/include
-    ${PROJ_ROOT}/src/core
-    ${GLFW_INCLUDE_DIRS}
+  target_include_directories(quadrotor_sim_core PRIVATE
+    ${SIM_ROOT}/include
+    ${SIM_ROOT}/src/core
   )
-  target_compile_options(quadrotor_sim_glfw_adapter PRIVATE -Wall -Wextra)
-  target_link_libraries(quadrotor_sim_glfw_adapter PRIVATE
+  target_compile_options(quadrotor_sim_core PRIVATE -Wall -Wextra)
+  target_link_libraries(quadrotor_sim_core PRIVATE
     mujoco
-    ${GLFW_LIBRARIES}
     pthread
     rt
     ${CMAKE_DL_LIBS}
   )
+endif()
+
+# ---- quadrotor_sim_glfw_adapter (render viewer) ----
+
+if(NOT TARGET quadrotor_sim_glfw_adapter)
+  find_package(PkgConfig)
+  pkg_check_modules(GLFW glfw3)
+  if(GLFW_FOUND)
+    add_executable(quadrotor_sim_glfw_adapter
+      ${SIM_ROOT}/src/glfw_adapter/glfw_adapter_main.cc
+    )
+    target_include_directories(quadrotor_sim_glfw_adapter PRIVATE
+      ${SIM_ROOT}/include
+      ${SIM_ROOT}/src/core
+      ${GLFW_INCLUDE_DIRS}
+    )
+    target_compile_options(quadrotor_sim_glfw_adapter PRIVATE -Wall -Wextra)
+    target_link_libraries(quadrotor_sim_glfw_adapter PRIVATE
+      mujoco
+      ${GLFW_LIBRARIES}
+      pthread
+      rt
+      ${CMAKE_DL_LIBS}
+    )
+  endif()
 endif()

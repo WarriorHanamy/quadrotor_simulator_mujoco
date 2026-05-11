@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -61,11 +62,6 @@ def _ensure_built():
             check=True,
             env=_env(),
         )
-        subprocess.run(
-            ["cmake", "--build", str(BUILD_DIR), "--parallel"],
-            check=True,
-            env=_env(),
-        )
 
 
 def run_core(args: argparse.Namespace) -> int:
@@ -82,10 +78,41 @@ def run_core(args: argparse.Namespace) -> int:
 
 
 def run_glfw(args: argparse.Namespace) -> int:
+    """Start core in background, then run GLFW viewer in foreground.
+
+    Core is automatically killed when GLFW exits or Ctrl+C is received.
+    """
     _ensure_built()
     model = args.model or str(PROJECT_ROOT / MODEL_DEFAULT)
-    argv = [str(GLFW_BIN), model]
-    os.execve(str(GLFW_BIN), argv, _env())
+
+    core_proc: subprocess.Popen | None = None
+
+    def _on_signal(sig: int, _frame):
+        if core_proc:
+            core_proc.terminate()
+        sys.exit(128 + sig)
+
+    signal.signal(signal.SIGINT, _on_signal)
+    signal.signal(signal.SIGTERM, _on_signal)
+
+    try:
+        core_proc = subprocess.Popen(
+            [str(CORE_BIN), model],
+            env=_env(),
+        )
+        glfw_proc = subprocess.Popen(
+            [str(GLFW_BIN), model],
+            env=_env(),
+        )
+        return glfw_proc.wait()
+    finally:
+        if core_proc:
+            core_proc.terminate()
+            try:
+                core_proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                core_proc.kill()
+                core_proc.wait()
 
 
 def main() -> None:

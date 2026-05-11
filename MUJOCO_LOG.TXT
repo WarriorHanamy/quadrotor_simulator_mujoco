@@ -1,3 +1,0 @@
-Mon May 11 18:55:17 2026
-WARNING: OpenGL error 0x502 in or before mjr_makeContext
-

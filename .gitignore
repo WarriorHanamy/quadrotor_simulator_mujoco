@@ -1,0 +1,7 @@
+MUJOCO_LOG*
+
+__pycache__/
+*.pyc
+
+build_standalone/
+.venv/
