@@ -6,14 +6,6 @@ It relies on MuJoCo version 2.3.2, and there is no need to install MuJoCo separa
 
 ## Environment Overview
 
-### Simulation View
-
-![Quadrotor Environment](images/quadrotor_env.png)
-
-### Camera View
-
-![Quadrotor Camera](images/quadrotor_camera.png)
-
 ## Dependencies
 
 Install the required system libraries:
@@ -31,6 +23,7 @@ Clone the package into your ROS 2 workspace src folder:
 cd ~/ros2_ws/src  
 git clone https://github.com/acp-lab/quadrotor_simulator_mujoco.git
 ```
+
 Then build the workspace:
 
 ```bash
@@ -55,3 +48,4 @@ ros2 launch quadrotor_simulator_mujoco single_quadrotor_sim.launch.py
 | /quadrotor/imu         | sensor_msgs/msg/Imu         | Inertial measurement unit data               |
 | /quadrotor/odom        | nav_msgs/msg/Odometry       | Full odometry                                |
 | /quadrotor/rgb_image   | sensor_msgs/msg/Image       | RGB image stream from onboard camera         |
+
