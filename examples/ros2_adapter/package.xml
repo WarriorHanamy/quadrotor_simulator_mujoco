@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>quadrotor_simulator_mujoco_ros2_adapter</name>
+  <version>0.1.0</version>
+  <description>ROS 2 adapter example for quadrotor_simulator_mujoco core library</description>
+  <maintainer email="user@example.com">user</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>rosgraph_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

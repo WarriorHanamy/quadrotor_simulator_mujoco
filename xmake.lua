@@ -1,46 +1,75 @@
 add_rules("mode.debug", "mode.release")
 set_languages("cxx17")
-
--- Output binaries to flat directory matching the existing CLI convention
 set_targetdir("build_standalone")
+add_includedirs("deps/include")
 
--- Bundled MuJoCo 2.3.2 (no xmake-repo package available)
+-- Bundled MuJoCo 2.3.2 (headers + .so)
 add_linkdirs("deps/lib")
-add_links("mujoco")
 
--- External dependencies with pinned versions
 add_requires("yaml-cpp 0.8.0")
 add_requires("eigen 3.4.0")
 add_requires("glfw3")
 
--- ---------------------------------------------------------------------------
--- Target: quadrotor_sim_core (headless physics engine)
--- ---------------------------------------------------------------------------
+-- =========================================================================
+-- Core libraries (static, zero middleware)
+-- =========================================================================
+
+target("quadrotor_sim")
+set_kind("static")
+add_files("core/quadrotor_sim/src/se3_controller.cpp")
+add_includedirs("core/quadrotor_sim/include")
+add_packages("eigen", "yaml-cpp")
+
+target("quadrotor_sim_shm")
+set_kind("static")
+add_files("core/shm/src/shm_backend.cpp")
+add_includedirs("core/shm/include", "core/quadrotor_sim/include")
+add_deps("quadrotor_sim")
+add_syslinks("pthread", "rt", "dl")
+
+target("quadrotor_sim_mujoco")
+set_kind("static")
+add_files("core/mujoco/src/sim_core.cpp")
+add_includedirs("core/mujoco/include", "core/shm/include", "core/quadrotor_sim/include")
+add_deps("quadrotor_sim", "quadrotor_sim_shm")
+add_links("mujoco")
+add_syslinks("pthread", "rt", "dl")
+
 target("quadrotor_sim_core")
-    set_kind("binary")
-    add_files("src/core/main.cc", "src/core/sim_core.cc")
-    add_includedirs("include", "src/core")
-    add_links("mujoco")
-    add_syslinks("pthread", "rt", "dl")
+set_kind("binary")
+add_files("apps/sim_core.cpp")
+add_includedirs("core/mujoco/include", "core/quadrotor_sim/include")
+add_deps("quadrotor_sim_mujoco")
+add_syslinks("pthread", "rt", "dl")
 
--- ---------------------------------------------------------------------------
--- Target: quadrotor_sim_se3_direct (SE3 controller via shared memory)
--- ---------------------------------------------------------------------------
-target("quadrotor_sim_se3_direct")
-    set_kind("binary")
-    add_files("src/se3_controller/main_direct.cc",
-              "src/se3_controller/se3_controller.cc")
-    add_includedirs("include", "src/core", "src/se3_controller")
-    add_packages("yaml-cpp", "eigen")
-    add_syslinks("pthread", "rt", "dl")
+target("quadrotor_sim_render")
+set_kind("static")
+add_files("core/mujoco/src/render.cpp")
+add_includedirs("core/mujoco/include", "core/quadrotor_sim/include")
+add_deps("quadrotor_sim")
+add_links("mujoco")
+add_syslinks("pthread", "rt", "dl")
 
--- ---------------------------------------------------------------------------
--- Target: quadrotor_sim_glfw_adapter (GLFW render viewer)
--- ---------------------------------------------------------------------------
+target("quadrotor_sim_glfw_viewer")
+set_kind("static")
+add_files("core/glfw/src/viewer.cpp")
+add_includedirs("core/glfw/include")
+add_packages("glfw3")
+add_links("mujoco", "GL")
+
 target("quadrotor_sim_glfw_adapter")
     set_kind("binary")
-    add_files("src/glfw_adapter/glfw_adapter_main.cc")
-    add_includedirs("include", "src/core")
+    add_files("apps/sim_render.cpp")
+    add_includedirs("core/shm/include", "core/quadrotor_sim/include")
     add_packages("glfw3")
+    add_deps("quadrotor_sim_shm")
     add_links("mujoco")
     add_syslinks("pthread", "rt", "dl")
+
+target("quadrotor_sim_se3_direct")
+set_kind("binary")
+add_files("apps/se3_direct.cpp")
+add_includedirs("core/shm/include", "core/quadrotor_sim/include")
+add_deps("quadrotor_sim", "quadrotor_sim_shm")
+add_packages("yaml-cpp")
+add_syslinks("pthread", "rt", "dl")
