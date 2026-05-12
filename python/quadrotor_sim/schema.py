@@ -1,5 +1,9 @@
 """Pydantic schema aligned with include/sim_schema.h."""
 
+# Coordinate frames:
+#   - World frame: ENU (X=East, Y=North, Z=Up)
+#   - Body frame:  FLU (X=Front, Y=Left, Z=Up)
+
 from pydantic import BaseModel, Field
 
 
@@ -35,11 +39,11 @@ class QuadrotorControl(BaseModel):
         default=0.0,
         ge=THRUST_MIN,
         le=THRUST_MAX,
-        description="Body-frame Z thrust [N]",
+        description="Body-frame (FLU) Z thrust [N]",
     )
     torque: tuple[float, float, float] = Field(
         default=(0.0, 0.0, 0.0),
-        description="Body-frame x/y/z moments [Nm], each in [-0.5, 0.5]",
+        description="Body-frame (FLU) x/y/z moments [Nm], each in [-0.5, 0.5]",
     )
 
 
@@ -54,21 +58,21 @@ class QuadrotorState(BaseModel):
     time: float = Field(default=0.0, description="Simulation time [s]")
     position: tuple[float, float, float] = Field(
         default=(0.0, 0.0, 0.0),
-        description="World-frame position x, y, z [m]",
+        description="World-frame (ENU) position x, y, z [m]",
     )
     orientation: tuple[float, float, float, float] = Field(
         default=(1.0, 0.0, 0.0, 0.0),
-        description="World-frame quaternion w, x, y, z",
+        description="World-frame (ENU) quaternion w, x, y, z",
     )
     linear_velocity: tuple[float, float, float] = Field(
         default=(0.0, 0.0, 0.0),
-        description="Body-frame linear velocity vx, vy, vz [m/s]",
+        description="Body-frame (FLU) linear velocity vx, vy, vz [m/s]",
     )
     angular_velocity: tuple[float, float, float] = Field(
         default=(0.0, 0.0, 0.0),
-        description="Body-frame angular velocity wx, wy, wz [rad/s]",
+        description="Body-frame (FLU) angular velocity wx, wy, wz [rad/s]",
     )
     linear_acceleration: tuple[float, float, float] = Field(
         default=(0.0, 0.0, 0.0),
-        description="Body-frame linear acceleration ax, ay, az [m/s²]",
+        description="Body-frame (FLU) linear acceleration ax, ay, az [m/s²]",
     )

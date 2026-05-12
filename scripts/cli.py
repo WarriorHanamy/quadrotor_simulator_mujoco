@@ -14,7 +14,7 @@ BUILD_DIR = PROJECT_ROOT / "build_standalone"
 CORE_BIN = BUILD_DIR / "quadrotor_sim_core"
 GLFW_BIN = BUILD_DIR / "quadrotor_sim_glfw_adapter"
 MODEL_DEFAULT = "deps/model/mujoco/drone.xml"
-CMAKE_STANDALONE = PROJECT_ROOT / "CMakeLists_standalone.txt"
+SIMCORE_CMAKE = PROJECT_ROOT / "deps" / "cmake" / "SimCore.cmake"
 
 
 def _env():
@@ -28,6 +28,7 @@ def _env():
 def _ensure_built():
     """Build C++ binaries if not already present."""
     if CORE_BIN.is_file():
+        print("sim: build skipped — binaries already up to date")
         return
 
     import shutil
@@ -36,13 +37,17 @@ def _ensure_built():
         shutil.rmtree(BUILD_DIR)
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Create a trampoline CMakeLists.txt in a temp dir that includes the
-    # standalone file.  cmake reads CMakeLists.txt from the -S directory.
+    # Create a trampoline CMakeLists.txt in a temp dir with inline cmake
+    # content (previously in CMakeLists_standalone.txt).  cmake reads
+    # CMakeLists.txt from the -S directory.
     with tempfile.TemporaryDirectory(prefix="sim_build_") as tmp_src:
         trampoline = Path(tmp_src) / "CMakeLists.txt"
         with open(trampoline, "w") as f:
             f.write("cmake_minimum_required(VERSION 3.10)\n")
-            f.write(f'include("{CMAKE_STANDALONE}")\n')
+            f.write("project(quadrotor_sim_core_standalone)\n")
+            f.write("set(CMAKE_CXX_STANDARD 17)\n")
+            f.write("set(CMAKE_CXX_STANDARD_REQUIRED ON)\n")
+            f.write(f'include("{SIMCORE_CMAKE}")\n')
 
         subprocess.run(
             [
@@ -77,10 +82,10 @@ def run_core(args: argparse.Namespace) -> int:
     os.execve(str(CORE_BIN), argv, _env())
 
 
-def run_glfw(args: argparse.Namespace) -> int:
-    """Start core in background, then run GLFW viewer in foreground.
+def run_render(args: argparse.Namespace) -> int:
+    """Start core in background, then run render viewer in foreground.
 
-    Core is automatically killed when GLFW exits or Ctrl+C is received.
+    Core is automatically killed when viewer exits or Ctrl+C is received.
     """
     _ensure_built()
     model = args.model or str(PROJECT_ROOT / MODEL_DEFAULT)
@@ -129,9 +134,11 @@ def main() -> None:
     p_run.add_argument("--ctrlnoise-rate", type=float, help="Control noise rate")
     p_run.set_defaults(func=run_core)
 
-    p_glfw = sub.add_parser("glfw", help="Start GLFW render viewer")
-    p_glfw.add_argument("--model", help=f"Path to drone.xml (default: {MODEL_DEFAULT})")
-    p_glfw.set_defaults(func=run_glfw)
+    p_render = sub.add_parser("render", help="Start render viewer")
+    p_render.add_argument(
+        "--model", help=f"Path to drone.xml (default: {MODEL_DEFAULT})"
+    )
+    p_render.set_defaults(func=run_render)
 
     args = parser.parse_args()
     sys.exit(args.func(args) or 0)

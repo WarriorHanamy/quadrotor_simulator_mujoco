@@ -14,12 +14,12 @@ uv run sim run
 uv run sim run --model path/to/drone.xml --real-time-factor 0.5
 
 # Run GLFW render viewer (requires display)
-uv run sim glfw
-uv run sim glfw --model path/to/drone.xml
+uv run sim render
+uv run sim render --model path/to/drone.xml
 ```
 
 - **uv** manages the Python environment and provides the `sim` CLI entrypoint.
-- C++ binaries are built to `build_standalone/` via CMake (`CMakeLists_standalone.txt`).
+- C++ binaries are built to `build_standalone/` via CMake; target definitions live in `deps/cmake/SimCore.cmake`.
 - MuJoCo 2.3.2 `.so` is bundled at `deps/lib/libmujoco.so`. No system MuJoCo install needed.
 - `LD_LIBRARY_PATH` is auto-set by `cli.py` to include `deps/lib/`.
 
@@ -27,7 +27,7 @@ uv run sim glfw --model path/to/drone.xml
 
 - **Core simulator** `quadrotor_sim_core` (`src/core/`) — headless physics loop, writes `QuadrotorState` to `/dev/shm/quadrotor_sim/state`, reads `QuadrotorControl` from `/dev/shm/quadrotor_sim/ctrl`.
 - **ROS 2 adapter** `quadrotor_sim_ros_adapter` (`src/ros_adapter/`) — independent `rclcpp::Node`, reads shm state → publishes odom/imu/clock, subscribes cmd → writes shm ctrl.
-- **GLFW adapter** `quadrotor_sim_glfw_adapter` (`src/glfw_adapter/`) — reads shm state → renders MuJoCo scene.
+- **Render adapter** `quadrotor_sim_glfw_adapter` (`src/glfw_adapter/`) — reads shm state → renders MuJoCo scene via GLFW.
 - **Legacy** `quadrotor_simulator` (`src/_legacy/`) — original monolithic binary (GLFW + ROS in-process), kept for backward compatibility.
 - **Schema** — `include/sim_schema.h` (C++), `python/quadrotor_sim/schema.py` (Pydantic), `python/quadrotor_sim/shm.py` (mmap I/O).
 - **Model** — `deps/model/mujoco/drone.xml` defines 4 actuators (`body_thrust`, `x_moment`, `y_moment`, `z_moment`) → mapped to `d->ctrl[0..3]`.
@@ -81,10 +81,10 @@ Synchronization: **seqlock** (monotonic `sequence` counter + memory barriers).
 | Offset | Field        | Type     | Unit  | Range        | Description                  |
 | ------ | ------------ | -------- | ----- | ------------ | ---------------------------- |
 | 0      | `sequence`     | `uint64_t` | -     | monotonic    | seqlock counter              |
-| 8      | `thrust`       | `double`   | N     | [0.0, 42.0]  | body-frame Z thrust          |
-| 16     | `torque[0]`    | `double`   | Nm    | [-0.5, 0.5]  | body-frame X moment (roll)   |
-| 24     | `torque[1]`    | `double`   | Nm    | [-0.5, 0.5]  | body-frame Y moment (pitch)  |
-| 32     | `torque[2]`    | `double`   | Nm    | [-0.5, 0.5]  | body-frame Z moment (yaw)    |
+| 8      | `thrust`       | `double`   | N     | [0.0, 42.0]  | body-frame (FLU) Z thrust      |
+| 16     | `torque[0]`    | `double`   | Nm    | [-0.5, 0.5]  | body-frame (FLU) X moment (roll)   |
+| 24     | `torque[1]`    | `double`   | Nm    | [-0.5, 0.5]  | body-frame (FLU) Y moment (pitch)  |
+| 32     | `torque[2]`    | `double`   | Nm    | [-0.5, 0.5]  | body-frame (FLU) Z moment (yaw)    |
 | 40     | `timestamp_ns` | `uint64_t` | ns    | -            | CLOCK_MONOTONIC at write     |
 
 ### State output (`QuadrotorState`, 192 B)
@@ -93,22 +93,22 @@ Synchronization: **seqlock** (monotonic `sequence` counter + memory barriers).
 | ------ | ---------------------- | ---------- | ----- | ----- | -------------------------------- |
 | 0      | `sequence`               | `uint64_t`   | -     | -     | seqlock counter                  |
 | 8      | `time`                   | `double`     | s     | -     | simulation time                  |
-| 16     | `position[0]`            | `double`     | m     | world | x                                |
-| 24     | `position[1]`            | `double`     | m     | world | y                                |
-| 32     | `position[2]`            | `double`     | m     | world | z                                |
-| 40     | `orientation[0]`         | `double`     | -     | world | quaternion w                     |
-| 48     | `orientation[1]`         | `double`     | -     | world | quaternion x                     |
-| 56     | `orientation[2]`         | `double`     | -     | world | quaternion y                     |
-| 64     | `orientation[3]`         | `double`     | -     | world | quaternion z                     |
-| 72     | `linear_velocity[0]`     | `double`     | m/s   | body  | vx                               |
-| 80     | `linear_velocity[1]`     | `double`     | m/s   | body  | vy                               |
-| 88     | `linear_velocity[2]`     | `double`     | m/s   | body  | vz                               |
-| 96     | `angular_velocity[0]`    | `double`     | rad/s | body  | wx                               |
-| 104    | `angular_velocity[1]`    | `double`     | rad/s | body  | wy                               |
-| 112    | `angular_velocity[2]`    | `double`     | rad/s | body  | wz                               |
-| 120    | `linear_acceleration[0]` | `double`     | m/s²  | body  | ax                               |
-| 128    | `linear_acceleration[1]` | `double`     | m/s²  | body  | ay                               |
-| 136    | `linear_acceleration[2]` | `double`     | m/s²  | body  | az                               |
+| 16     | `position[0]`            | `double`     | m     | world (ENU) | x                                |
+| 24     | `position[1]`            | `double`     | m     | world (ENU) | y                                |
+| 32     | `position[2]`            | `double`     | m     | world (ENU) | z                                |
+| 40     | `orientation[0]`         | `double`     | -     | world (ENU) | quaternion w                     |
+| 48     | `orientation[1]`         | `double`     | -     | world (ENU) | quaternion x                     |
+| 56     | `orientation[2]`         | `double`     | -     | world (ENU) | quaternion y                     |
+| 64     | `orientation[3]`         | `double`     | -     | world (ENU) | quaternion z                     |
+| 72     | `linear_velocity[0]`     | `double`     | m/s   | body (FLU)  | vx                               |
+| 80     | `linear_velocity[1]`     | `double`     | m/s   | body (FLU)  | vy                               |
+| 88     | `linear_velocity[2]`     | `double`     | m/s   | body (FLU)  | vz                               |
+| 96     | `angular_velocity[0]`    | `double`     | rad/s | body (FLU)  | wx                               |
+| 104    | `angular_velocity[1]`    | `double`     | rad/s | body (FLU)  | wy                               |
+| 112    | `angular_velocity[2]`    | `double`     | rad/s | body (FLU)  | wz                               |
+| 120    | `linear_acceleration[0]` | `double`     | m/s²  | body (FLU)  | ax                               |
+| 128    | `linear_acceleration[1]` | `double`     | m/s²  | body (FLU)  | ay                               |
+| 136    | `linear_acceleration[2]` | `double`     | m/s²  | body (FLU)  | az                               |
 | 144    | `timestamp_ns`           | `uint64_t`   | ns    | -     | CLOCK_MONOTONIC at write         |
 
 ### Image output (`ImageData`, 64 B header + pixel data)
@@ -128,6 +128,7 @@ Synchronization: **seqlock** (monotonic `sequence` counter + memory barriers).
 - **Gravity**: Always `[0, 0, -9.81]` in world frame. IMU accelerometer reads include gravity; the ROS adapter subtracts `9.81` on Z (legacy convention).
 - **IMU orientation**: The `orient` field is the world-frame quaternion. The ROS adapter reads frame-quaternion from MuJoCo sensors for the IMU message.
 - **Scalar type**: `double` for Phy/Sim accuracy, `float` ranges are sufficient for all physical quantities.
+- **Coordinate frames**: World is ENU (X=East, Y=North, Z=Up); body is FLU (X=Front, Y=Left, Z=Up).
 
 ### Adapter protocol
 

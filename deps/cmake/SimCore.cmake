@@ -1,5 +1,5 @@
 # Shared core + GLFW target definitions.
-# Included by both CMakeLists.txt (ament) and CMakeLists_standalone.txt (pure cmake).
+# Included by CMakeLists.txt (ament) and by the CLI trampoline (non-ROS host build).
 #
 # Guarded with if(NOT TARGET ...) to support duplicate inclusion.
 

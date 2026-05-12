@@ -14,6 +14,10 @@
  *
  * Synchronization: seqlock (monotonic sequence number + memory barriers).
  * All structs use #pragma pack(1) for ABI stability across compilers.
+ *
+ * Coordinate frames:
+ *   - World frame: ENU (X=East, Y=North, Z=Up)
+ *   - Body frame:  FLU (X=Front, Y=Left, Z=Up)
  */
 
 #pragma pack(push, 1)
@@ -55,8 +59,8 @@ static constexpr uint32_t IMAGE_MAX_BYTES  = IMAGE_MAX_WIDTH * IMAGE_MAX_HEIGHT 
 
 struct QuadrotorControl {
   uint64_t sequence;        /**< seqlock counter (monotonic)       */
-  double   thrust;          /**< body-frame Z force [N]            */
-  double   torque[3];       /**< body-frame x/y/z moments [Nm]     */
+  double   thrust;          /**< body-frame (FLU) Z force [N]        */
+  double   torque[3];       /**< body-frame (FLU) x/y/z moments [Nm]*/
   uint64_t timestamp_ns;    /**< CLOCK_MONOTONIC [ns]              */
   uint8_t  _pad[16];        /**< align to 64 bytes                 */
 };
@@ -69,11 +73,11 @@ static_assert(sizeof(QuadrotorControl) == 64, "QuadrotorControl must be 64 bytes
 struct QuadrotorState {
   uint64_t sequence;                /**< seqlock counter (monotonic)          */
   double   time;                    /**< simulation time [s]                  */
-  double   position[3];             /**< world-frame x, y, z [m]             */
-  double   orientation[4];          /**< world-frame quaternion w, x, y, z   */
-  double   linear_velocity[3];      /**< body-frame vx, vy, vz [m/s]         */
-  double   angular_velocity[3];     /**< body-frame wx, wy, wz [rad/s]       */
-  double   linear_acceleration[3];  /**< body-frame ax, ay, az [m/s²]        */
+  double   position[3];             /**< world-frame (ENU) x, y, z [m]         */
+  double   orientation[4];          /**< world-frame (ENU) quaternion w, x, y, z */
+  double   linear_velocity[3];      /**< body-frame (FLU) vx, vy, vz [m/s]     */
+  double   angular_velocity[3];     /**< body-frame (FLU) wx, wy, wz [rad/s]   */
+  double   linear_acceleration[3];  /**< body-frame (FLU) ax, ay, az [m/s²]    */
   uint64_t timestamp_ns;            /**< CLOCK_MONOTONIC [ns]                 */
   uint8_t  _pad[40];                /**< align to 192 bytes                  */
 };
