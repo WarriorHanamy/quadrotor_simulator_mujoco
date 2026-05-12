@@ -1,4 +1,4 @@
-"""Pydantic schema aligned with include/sim_schema.h."""
+"""Pydantic schema aligned with types.hpp and shm_layout.hpp."""
 
 # Coordinate frames:
 #   - World frame: ENU (X=East, Y=North, Z=Up)
@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
-# Physical limits (aligned with sim_schema.h + drone.xml)
+# Physical limits (aligned with types.hpp + drone.xml)
 # ---------------------------------------------------------------------------
 
 GRAVITY_Z = -9.81  # [m/s²]

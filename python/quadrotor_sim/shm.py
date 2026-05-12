@@ -1,6 +1,6 @@
 """Shared memory backend for the quadrotor simulator.
 
-Uses ctypes struct layouts matching include/sim_schema.h exactly.
+Uses ctypes struct layouts matching core/shm/include/quadrotor_sim/shm/shm_layout.hpp exactly.
 Depends on mmap (Linux /dev/shm), no additional libraries.
 """
 
@@ -13,7 +13,7 @@ from typing import Optional
 
 
 # ---------------------------------------------------------------------------
-# Path constants (aligned with sim_schema.h)
+# Path constants (aligned with shm_layout.hpp)
 # ---------------------------------------------------------------------------
 
 SHM_BASE_DIR = "/dev/shm/quadrotor_sim"
@@ -28,7 +28,7 @@ SHM_IMAGE_FILE = SHM_BASE_DIR + "/image"
 ENCODING_RGB8 = 0x72363862  # 'rgb8' in little-endian
 
 # ---------------------------------------------------------------------------
-# Ctypes structs — binary-identical to sim_schema.h
+# Ctypes structs — binary-identical to shm_layout.hpp
 # ---------------------------------------------------------------------------
 
 

@@ -19,18 +19,101 @@ uv run sim render --model path/to/drone.xml
 ```
 
 - **uv** manages the Python environment and provides the `sim` CLI entrypoint.
-- C++ binaries are built to `build_standalone/` via CMake; target definitions live in `deps/cmake/SimCore.cmake`.
+- C++ binaries are built to `build_standalone/` via **xmake**; target definitions live in `xmake.lua`.
 - MuJoCo 2.3.2 `.so` is bundled at `deps/lib/libmujoco.so`. No system MuJoCo install needed.
 - `LD_LIBRARY_PATH` is auto-set by `cli.py` to include `deps/lib/`.
 
-## Architecture
+## Codemap
 
-- **Core simulator** `quadrotor_sim_core` (`src/core/`) — headless physics loop, writes `QuadrotorState` to `/dev/shm/quadrotor_sim/state`, reads `QuadrotorControl` from `/dev/shm/quadrotor_sim/ctrl`.
-- **ROS 2 adapter** `quadrotor_sim_ros_adapter` (`src/ros_adapter/`) — independent `rclcpp::Node`, reads shm state → publishes odom/imu/clock, subscribes cmd → writes shm ctrl.
-- **Render adapter** `quadrotor_sim_glfw_adapter` (`src/glfw_adapter/`) — reads shm state → renders MuJoCo scene via GLFW.
-- **Legacy** `quadrotor_simulator` (`src/_legacy/`) — original monolithic binary (GLFW + ROS in-process), kept for backward compatibility.
-- **Schema** — `include/sim_schema.h` (C++), `python/quadrotor_sim/schema.py` (Pydantic), `python/quadrotor_sim/shm.py` (mmap I/O).
-- **Model** — `deps/model/mujoco/drone.xml` defines 4 actuators (`body_thrust`, `x_moment`, `y_moment`, `z_moment`) → mapped to `d->ctrl[0..3]`.
+```
+apps/                               # ○ executable entry points (main() functions)
+  cli.py                             #   Python CLI `sim build|run|render|run-se3` — builds xmake, spawns subprocesses
+  sim_core.cpp                       #   Headless core binary: instantiates SimCore, runs physics loop with SIGINT handler
+  sim_render.cpp                     #   GLFW adapter binary: reads shm StateWire, loads MuJoCo model, renders mjvScene
+  se3_direct.cpp                     #   Standalone SE(3) controller binary: reads shm StateWire → computes ControlWire via Se3Controller
+
+core/                               # ◆ C++ static libraries
+  quadrotor_sim/                     #   Domain types + SE(3) geometric controller (zero middleware deps)
+    include/quadrotor_sim/
+      types.hpp                       #     State, Control, Se3Setpoint, Se3Gains structs + physical constants
+      se3_controller.hpp              #     Se3Controller class: Compute(state, setpoint) → (thrust, torque)
+    src/se3_controller.cpp            #     SE(3) controller implementation (Eigen-based, Lee et al. 2010)
+  shm/                               #   Shared memory IPC layer (mmap + seqlock)
+    include/quadrotor_sim/shm/
+      shm_layout.hpp                  #     StateWire (192 B), ControlWire (64 B) packed structs + seqlock ReadConsistent<T>()
+      shm_backend.hpp                 #     Inline Create/Open shm functions (mmap wrappers)
+    src/shm_backend.cpp               #     WriteBegin/WriteEnd + wire↔model conversion (ToWire/FromWire)
+  mujoco/                            #   MuJoCo simulation (links libmujoco.so)
+    include/quadrotor_sim/mujoco/
+      sim_core.hpp                    #     SimCore class: physics engine with RT sync, control noise, SHM PIMPL
+      render.hpp                      #     Renderer: offscreen mjvScene render → RGB pixel buffer
+    src/sim_core.cpp                  #     Loads XML model, runs mj_step() loop, ExtractState/ApplyControl via shm
+    src/render.cpp                    #     Renderer implementation
+  glfw/                              #   GLFW window wrapper
+    include/quadrotor_sim/glfw/
+      viewer.hpp                      #     Viewer class: GLFW window + texture display
+    src/viewer.cpp                    #     Window creation, Present() RGB texture, PollEvents()
+
+python/quadrotor_sim/               # ◇ Python package (ctypes-based SHM protocol bindings)
+  __init__.py                        #   Package init (version 0.1.0)
+  schema.py                           #   Pydantic QuadrotorState, QuadrotorControl + physical constants
+  shm.py                              #   ShmReader, ShmWriter: ctypes struct + mmap + seqlock
+
+examples/ros2_adapter/               # △ ROS 2 adapter (separate ament_cmake project)
+  CMakeLists.txt                      #   ROS 2 CMake: links to build_standalone/ static libs
+  package.xml                         #   ROS 2 package manifest
+  src/ros_adapter_node.cpp            #   ROS node: shm state → /odom, /imu, /clock publishers; /cmd subscriber → shm ctrl
+  src/se3_controller_node.cpp         #   ROS node: /odom + /se3_reference subscriber → SE(3) control → /cmd publisher
+  launch/single_quadrotor_se3_sim.launch.py  # Launch file (namespace `quadrotor`)
+
+deps/                                # ◼ Vendored dependencies
+  include/mujoco/                     #   MuJoCo 2.3.2 C headers (10 files)
+  lib/libmujoco.so.2.3.2             #   Bundled MuJoCo shared library
+  model/mujoco/drone.xml              #   1 kg quadrotor model: 4 actuators, 6 sensors, RK4 integrator, 0.001 s timestep
+
+config/se3_gains.yaml                 # Default SE(3) gains (K_p, K_v, K_R, K_w)
+
+docker/                               # Docker support for ROS adapter
+  Dockerfile                          #   ros:humble-ros-core image + ROS adapter build
+  docker-compose.yml                  #   Mounts host /dev/shm into container
+  entrypoint.sh                       #   Sources ROS, runs adapter
+  CMakeLists_ros_adapter.txt          #   Standalone CMake for colcon build in Docker
+```
+
+### C++ target dependency graph (xmake.lua)
+
+```
+quadrotor_sim_core  (binary)        quadrotor_sim_glfw_adapter (binary)      quadrotor_sim_se3_direct (binary)
+       │                                     │                                       │
+       ▼                                     ▼                                       ▼
+quadrotor_sim_mujoco (.a)           quadrotor_sim_shm (.a)                quadrotor_sim_shm (.a)
+       │                                     │                                       │
+       ▼                                     ▼                                       ▼
+ quadrotor_sim_shm (.a)             quadrotor_sim (.a)                    quadrotor_sim (.a)
+       │
+       ▼
+ quadrotor_sim (.a)
+       │
+  ┌────┴────┐
+  ▼         ▼
+ eigen    yaml-cpp
+
+quadrotor_sim_render (.a)            quadrotor_sim_glfw_viewer (.a)
+  (static lib, used by               (static lib, used by
+   GLFW adapter binary)                GLFW adapter binary)
+```
+
+The `sim build` command invokes `xmake build -w -j`. All output lands in `build_standalone/`.
+
+### Legend
+
+| Symbol | Meaning                                     |
+| ------ | ------------------------------------------- |
+| `○`    | Executable entry point (`main()`)           |
+| `◆`    | C++ static library (`.a`)                   |
+| `◇`    | Python package                              |
+| `△`    | External adapter (separate build system)    |
+| `◼`    | Vendored dependency                         |
 
 ## Topic remapping under namespace
 
@@ -141,12 +224,13 @@ An adapter is any process that reads `/dev/shm/quadrotor_sim/state` and optional
 
 ### Schema sources
 
-| Language | File                                      | Role                           |
-| -------- | ----------------------------------------- | ------------------------------ |
-| C++      | `include/sim_schema.h`                    | ABI-stable structs + seqlock   |
-| Python   | `python/quadrotor_sim/schema.py`          | Pydantic validation models     |
-| Python   | `python/quadrotor_sim/shm.py`             | mmap+seqlock reader/writer     |
-| —        | `AGENTS.md` (this section)                | Abstract reference contract    |
+| Language | File                                    | Role                           |
+| -------- | --------------------------------------- | ------------------------------ |
+| C++      | `core/shm/include/quadrotor_sim/shm/shm_layout.hpp` | ABI-stable structs + seqlock   |
+| C++      | `core/quadrotor_sim/include/quadrotor_sim/types.hpp` | Domain structs + constants     |
+| Python   | `python/quadrotor_sim/schema.py`        | Pydantic validation models     |
+| Python   | `python/quadrotor_sim/shm.py`           | mmap+seqlock reader/writer     |
+| —        | `AGENTS.md` (this section)              | Abstract reference contract    |
 
 ## No tests / no CI
 
