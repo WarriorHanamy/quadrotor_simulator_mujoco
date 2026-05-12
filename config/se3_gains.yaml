@@ -1,0 +1,13 @@
+# SE(3) geometric controller gains for quadrotor_simulator_mujoco.
+#
+# Each gain vector corresponds to [x, y, z] (or [Roll, Pitch, Yaw] for K_R / K_w).
+#
+# K_p : position proportional gain [N/m]
+# K_v : velocity proportional gain [N·s/m]
+# K_R : attitude error gain on SO(3)   [Nm]
+# K_w : angular rate damping gain      [Nm·s/rad]
+
+K_p: [4.0, 4.0, 6.0]
+K_v: [3.0, 3.0, 4.0]
+K_R: [8.0, 8.0, 4.0]
+K_w: [1.0, 1.0, 0.5]

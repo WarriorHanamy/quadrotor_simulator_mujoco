@@ -5,7 +5,6 @@ import os
 import signal
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 
@@ -13,8 +12,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BUILD_DIR = PROJECT_ROOT / "build_standalone"
 CORE_BIN = BUILD_DIR / "quadrotor_sim_core"
 GLFW_BIN = BUILD_DIR / "quadrotor_sim_glfw_adapter"
+SE3_BIN = BUILD_DIR / "quadrotor_sim_se3_direct"
 MODEL_DEFAULT = "deps/model/mujoco/drone.xml"
-SIMCORE_CMAKE = PROJECT_ROOT / "deps" / "cmake" / "SimCore.cmake"
+GAINS_DEFAULT = "config/se3_gains.yaml"
 
 
 def _env():
@@ -27,46 +27,17 @@ def _env():
 
 def _ensure_built():
     """Build C++ binaries if not already present."""
-    if CORE_BIN.is_file():
+    if CORE_BIN.is_file() and SE3_BIN.is_file():
         print("sim: build skipped — binaries already up to date")
         return
 
-    import shutil
-
-    if BUILD_DIR.exists():
-        shutil.rmtree(BUILD_DIR)
-    BUILD_DIR.mkdir(parents=True, exist_ok=True)
-
-    # Create a trampoline CMakeLists.txt in a temp dir with inline cmake
-    # content (previously in CMakeLists_standalone.txt).  cmake reads
-    # CMakeLists.txt from the -S directory.
-    with tempfile.TemporaryDirectory(prefix="sim_build_") as tmp_src:
-        trampoline = Path(tmp_src) / "CMakeLists.txt"
-        with open(trampoline, "w") as f:
-            f.write("cmake_minimum_required(VERSION 3.10)\n")
-            f.write("project(quadrotor_sim_core_standalone)\n")
-            f.write("set(CMAKE_CXX_STANDARD 17)\n")
-            f.write("set(CMAKE_CXX_STANDARD_REQUIRED ON)\n")
-            f.write(f'include("{SIMCORE_CMAKE}")\n')
-
-        subprocess.run(
-            [
-                "cmake",
-                "-Wno-dev",
-                "-DCMAKE_BUILD_TYPE=Release",
-                "-S",
-                tmp_src,
-                "-B",
-                str(BUILD_DIR),
-            ],
-            check=True,
-            env=_env(),
-        )
-        subprocess.run(
-            ["cmake", "--build", str(BUILD_DIR), "--parallel"],
-            check=True,
-            env=_env(),
-        )
+    print("sim: building via xmake...")
+    subprocess.run(
+        ["xmake", "build", "-w", "-j"],
+        check=True,
+        env=_env(),
+        cwd=str(PROJECT_ROOT),
+    )
 
 
 def run_core(args: argparse.Namespace) -> int:
@@ -120,6 +91,67 @@ def run_render(args: argparse.Namespace) -> int:
                 core_proc.wait()
 
 
+def run_se3(args: argparse.Namespace) -> int:
+    """Start core + SE(3) controller, optionally with GLFW render viewer.
+
+    Core runs in background; controller runs in foreground (Ctrl-C stops both).
+    """
+    _ensure_built()
+    model = args.model or str(PROJECT_ROOT / MODEL_DEFAULT)
+
+    core_proc: subprocess.Popen | None = None
+    glfw_proc: subprocess.Popen | None = None
+
+    def _on_signal(sig: int, _frame):
+        if glfw_proc:
+            glfw_proc.terminate()
+        if core_proc:
+            core_proc.terminate()
+        sys.exit(128 + sig)
+
+    signal.signal(signal.SIGINT, _on_signal)
+    signal.signal(signal.SIGTERM, _on_signal)
+
+    # Build SE3 controller argv
+    gains_path = args.gains_file or str(PROJECT_ROOT / GAINS_DEFAULT)
+    se3_argv = [
+        str(SE3_BIN),
+        "--pos-x",
+        str(args.pos_x),
+        "--pos-y",
+        str(args.pos_y),
+        "--pos-z",
+        str(args.pos_z),
+        "--yaw",
+        str(args.yaw),
+        "--gains-file",
+        gains_path,
+    ]
+    if args.rate:
+        se3_argv += ["--rate", str(args.rate)]
+
+    try:
+        core_proc = subprocess.Popen([str(CORE_BIN), model], env=_env())
+        if args.render:
+            glfw_proc = subprocess.Popen([str(GLFW_BIN), model], env=_env())
+        os.execve(str(SE3_BIN), se3_argv, _env())
+    finally:
+        if glfw_proc:
+            glfw_proc.terminate()
+            try:
+                glfw_proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                glfw_proc.kill()
+                glfw_proc.wait()
+        if core_proc:
+            core_proc.terminate()
+            try:
+                core_proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                core_proc.kill()
+                core_proc.wait()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="sim")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -139,6 +171,21 @@ def main() -> None:
         "--model", help=f"Path to drone.xml (default: {MODEL_DEFAULT})"
     )
     p_render.set_defaults(func=run_render)
+
+    p_se3 = sub.add_parser("run-se3", help="Start core + SE(3) controller")
+    p_se3.add_argument("--model", help=f"Path to drone.xml (default: {MODEL_DEFAULT})")
+    p_se3.add_argument("--pos-x", type=float, default=0.0, help="Setpoint X [m]")
+    p_se3.add_argument("--pos-y", type=float, default=0.0, help="Setpoint Y [m]")
+    p_se3.add_argument("--pos-z", type=float, default=2.0, help="Setpoint Z [m]")
+    p_se3.add_argument("--yaw", type=float, default=0.0, help="Setpoint yaw [rad]")
+    p_se3.add_argument(
+        "--rate", type=float, default=500.0, help="Control loop rate [Hz]"
+    )
+    p_se3.add_argument("--render", action="store_true", help="Also start GLFW viewer")
+    p_se3.add_argument(
+        "--gains-file", help=f"Path to se3_gains.yaml (default: {GAINS_DEFAULT})"
+    )
+    p_se3.set_defaults(func=run_se3)
 
     args = parser.parse_args()
     sys.exit(args.func(args) or 0)

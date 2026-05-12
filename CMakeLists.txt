@@ -54,7 +54,7 @@ ament_target_dependencies(
 )
 
 # ---------------------------------------------------------------------------
-# Target 2+3: quadrotor_sim_core + quadrotor_sim_glfw_adapter
+# MuJoCo library definition (imported shared lib, used by legacy target)
 # (defined in deps/cmake/SimCore.cmake)
 # ---------------------------------------------------------------------------
 include(${CMAKE_CURRENT_SOURCE_DIR}/deps/cmake/SimCore.cmake)
@@ -79,19 +79,46 @@ ament_target_dependencies(
 )
 
 # ---------------------------------------------------------------------------
+# Target 5: quadrotor_sim_se3_ros (SE(3) controller ROS 2 node)
+# ---------------------------------------------------------------------------
+find_package(yaml-cpp REQUIRED)
+find_package(Eigen3 REQUIRED)
+
+file(GLOB source_se3_ros ${CMAKE_CURRENT_SOURCE_DIR}/src/se3_controller/ros_node.cpp
+                         ${CMAKE_CURRENT_SOURCE_DIR}/src/se3_controller/se3_controller.cc)
+add_executable(quadrotor_sim_se3_ros ${source_se3_ros})
+target_include_directories(quadrotor_sim_se3_ros PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/se3_controller>
+  $<INSTALL_INTERFACE:include>)
+target_compile_features(quadrotor_sim_se3_ros PUBLIC cxx_std_17)
+ament_target_dependencies(
+  quadrotor_sim_se3_ros
+  rclcpp
+  geometry_msgs
+  nav_msgs
+)
+target_link_libraries(quadrotor_sim_se3_ros
+  yaml-cpp::yaml-cpp
+  Eigen3::Eigen
+)
+
+# ---------------------------------------------------------------------------
 # Install
 # ---------------------------------------------------------------------------
 install(TARGETS
   quadrotor_simulator
-  quadrotor_sim_core
   quadrotor_sim_ros_adapter
-  quadrotor_sim_glfw_adapter
+  quadrotor_sim_se3_ros
   DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY launch
          DESTINATION share/${PROJECT_NAME})
 
 install(DIRECTORY deps/model
+        DESTINATION share/${PROJECT_NAME})
+
+install(DIRECTORY config
         DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)

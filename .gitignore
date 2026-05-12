@@ -3,7 +3,9 @@ MUJOCO_LOG*
 __pycache__/
 *.pyc
 
+build/
 build_standalone/
+.xmake/
 .venv/
 .opencode/
 .ruff_cache/
