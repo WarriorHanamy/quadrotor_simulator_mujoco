@@ -7,8 +7,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+if not (PROJECT_ROOT / "xmake.lua").is_file():
+    for p in [Path.cwd(), *Path.cwd().parents]:
+        cand = p / "deps" / "mujoco_quadrotor"
+        if (cand / "xmake.lua").is_file():
+            PROJECT_ROOT = cand
+            break
 BUILD_DIR = PROJECT_ROOT / "build_standalone"
 CORE_BIN = BUILD_DIR / "quadrotor_sim_core"
 GLFW_BIN = BUILD_DIR / "quadrotor_sim_glfw_adapter"
@@ -25,19 +31,15 @@ def _env():
     return env
 
 
-def _ensure_built():
-    """Build C++ binaries if not already present."""
-    if CORE_BIN.is_file() and SE3_BIN.is_file():
-        print("sim: build skipped — binaries already up to date")
-        return
+_BUILD_HINT = "Build via the parent project:  uv run dq-build-sim"
 
-    print("sim: building via xmake...")
-    subprocess.run(
-        ["xmake", "build", "-w", "-j"],
-        check=True,
-        env=_env(),
-        cwd=str(PROJECT_ROOT),
-    )
+
+def _ensure_built():
+    """Check that C++ binaries exist.  Do NOT invoke xmake from here."""
+    if CORE_BIN.is_file() and SE3_BIN.is_file():
+        return
+    print(f"sim: binaries not found — {_BUILD_HINT}", file=sys.stderr)
+    sys.exit(1)
 
 
 def run_core(args: argparse.Namespace) -> int:
@@ -132,13 +134,9 @@ def run_se3(args: argparse.Namespace) -> int:
         se3_argv += ["--rate", str(args.rate)]
 
     try:
-        core_proc = subprocess.Popen(
-            [str(CORE_BIN), model], env=_env(), start_new_session=True
-        )
+        core_proc = subprocess.Popen([str(CORE_BIN), model], env=_env(), start_new_session=True)
         if args.render:
-            glfw_proc = subprocess.Popen(
-                [str(GLFW_BIN), model], env=_env(), start_new_session=True
-            )
+            glfw_proc = subprocess.Popen([str(GLFW_BIN), model], env=_env(), start_new_session=True)
         # Run SE3 controller as foreground child (not execve —
         # execve would orphan core/glfw and send them stray signals)
         se3_proc = subprocess.Popen(se3_argv, env=_env())
@@ -165,7 +163,9 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_build = sub.add_parser("build", help="Compile C++ binaries")
-    p_build.set_defaults(func=lambda _: _ensure_built() or 0)
+    p_build.set_defaults(
+        func=lambda _: (_ensure_built(), print(f"sim: already built — {_BUILD_HINT}"))[0]
+    )
 
     p_run = sub.add_parser("run", help="Start headless core simulator")
     p_run.add_argument("--model", help=f"Path to drone.xml (default: {MODEL_DEFAULT})")
@@ -175,9 +175,7 @@ def main() -> None:
     p_run.set_defaults(func=run_core)
 
     p_render = sub.add_parser("render", help="Start render viewer")
-    p_render.add_argument(
-        "--model", help=f"Path to drone.xml (default: {MODEL_DEFAULT})"
-    )
+    p_render.add_argument("--model", help=f"Path to drone.xml (default: {MODEL_DEFAULT})")
     p_render.set_defaults(func=run_render)
 
     p_se3 = sub.add_parser("run-se3", help="Start core + SE(3) controller")
@@ -186,13 +184,9 @@ def main() -> None:
     p_se3.add_argument("--pos-y", type=float, default=0.0, help="Setpoint Y [m]")
     p_se3.add_argument("--pos-z", type=float, default=2.0, help="Setpoint Z [m]")
     p_se3.add_argument("--yaw", type=float, default=0.0, help="Setpoint yaw [rad]")
-    p_se3.add_argument(
-        "--rate", type=float, default=500.0, help="Control loop rate [Hz]"
-    )
+    p_se3.add_argument("--rate", type=float, default=500.0, help="Control loop rate [Hz]")
     p_se3.add_argument("--render", action="store_true", help="Also start GLFW viewer")
-    p_se3.add_argument(
-        "--gains-file", help=f"Path to se3_gains.yaml (default: {GAINS_DEFAULT})"
-    )
+    p_se3.add_argument("--gains-file", help=f"Path to se3_gains.yaml (default: {GAINS_DEFAULT})")
     p_se3.set_defaults(func=run_se3)
 
     args = parser.parse_args()
