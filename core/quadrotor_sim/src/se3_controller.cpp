@@ -22,6 +22,7 @@ Se3Gains Se3Controller::LoadGainsFromYAML(const std::string &path) {
     load_arr("K_v", g.K_v);
     load_arr("K_R", g.K_R);
     load_arr("K_w", g.K_w);
+    load_arr("J", g.J);
   } catch (const YAML::Exception &e) {
     std::fprintf(stderr,
                  "se3_controller: YAML error in %s: %s — using defaults\n",
@@ -68,16 +69,19 @@ void Se3Controller::Compute(const State &state, const Se3Setpoint &sp,
   Matrix3d D = R_err - R_err.transpose();
   Vector3d e_R(0.5 * D(2, 1), 0.5 * D(0, 2), 0.5 * D(1, 0));
 
-  const double *omega = state.angular_velocity;
-  ctrl.torque[0] =
-      std::clamp(-gains_.K_R[0] * e_R[0] - gains_.K_w[0] * omega[0], kTorqueMin,
-                 kTorqueMax);
-  ctrl.torque[1] =
-      std::clamp(-gains_.K_R[1] * e_R[1] - gains_.K_w[1] * omega[1], kTorqueMin,
-                 kTorqueMax);
-  ctrl.torque[2] =
-      std::clamp(-gains_.K_R[2] * e_R[2] - gains_.K_w[2] * omega[2], kTorqueMin,
-                 kTorqueMax);
+  Eigen::Map<const Vector3d> K_R(gains_.K_R);
+  Eigen::Map<const Vector3d> K_w(gains_.K_w);
+  Vector3d omega(state.angular_velocity);
+  Vector3d torque = -K_R.cwiseProduct(e_R) - K_w.cwiseProduct(omega);
+
+  // Gyroscopic compensation: ω × (J ω)
+  Vector3d J_omega(gains_.J[0] * omega[0], gains_.J[1] * omega[1],
+                   gains_.J[2] * omega[2]);
+  torque += omega.cross(J_omega);
+
+  ctrl.torque[0] = std::clamp(torque[0], kTorqueMin, kTorqueMax);
+  ctrl.torque[1] = std::clamp(torque[1], kTorqueMin, kTorqueMax);
+  ctrl.torque[2] = std::clamp(torque[2], kTorqueMin, kTorqueMax);
 }
 
 } // namespace quadrotor_sim

@@ -35,6 +35,7 @@ struct Se3Gains {
   double K_v[3] = {3.0, 3.0, 4.0};    /**< velocity proportional      */
   double K_R[3] = {8.0, 8.0, 4.0};    /**< attitude on SO(3)          */
   double K_w[3] = {1.0, 1.0, 0.5};    /**< angular rate damping       */
+  double J[3]   = {0.00125, 0.00125, 0.00248};  /**< diag inertia [kg·m²] */
 };
 
 inline constexpr double kGravityZ  = -9.81;   /**< [m/s²]  */
